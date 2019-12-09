@@ -8,7 +8,7 @@
             "name": "(lldb) Launch",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/Assignment_6/build/assignment6",
+            "program": "${workspaceFolder}/Picture-Match/build/pictureMatch",
             "args": [],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",

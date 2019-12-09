@@ -8,6 +8,12 @@
 #include "stb_image.h"
 
 #include <iostream>
+#include <stdio.h>
+// #include <stdlib.h>
+// #include <time.h>
+#include <ctime>
+#include <cstdlib>
+
 extern int WIDTH;
 extern int HEIGHT;
 
@@ -35,7 +41,7 @@ int generate_random_number(int left_bot, int left_top, int right_bot, int right_
 	int left_range_length = left_top - left_bot;
 	int right_range_length = right_top - right_bot;
 	int total_length_of_range = left_range_length + right_range_length;
-	int random_num = std::rand() % total_length_of_range;
+	int random_num = rand() % total_length_of_range;
 	if (random_num < left_range_length) {
 		return left_bot + random_num;
 	} else {
@@ -43,15 +49,47 @@ int generate_random_number(int left_bot, int left_top, int right_bot, int right_
 	}
 }
 
+void randomize_angles(Eigen::MatrixXf &vertices, int index_of_start_col) {	
+	// Translate to origin
+	Eigen::Vector2f T;
+	T << V.col(index_of_start_col).x(), V.col(index_of_start_col).y();
+	for (int col=0; col < 6; col++) {
+		vertices.col(col) = vertices.col(col) - T;
+	}
+
+	// Rotate
+	Eigen::MatrixXf R(2,2);
+	int random = rand() % 720; // range 0 to 720
+	random -= 360; // range -360 to 360
+	random = (random/20) * 20; // get multiple of 20
+
+	// Convert to radians
+	double rad = random * (3.1415926535/180);
+	std::cout << rad << std::endl;
+	R << cos(rad), -sin(rad),
+		 sin(rad), cos(rad);
+
+	vertices = R * vertices;
+
+	// Translate back
+	for (int col=0; col < 6; col++) {
+		vertices.col(col) = vertices.col(col) + T;
+	}
+}
+
 void append_texture_vertices(int width, int height, int index_of_start_col) {
-	Eigen::MatrixXf to_append(2,6);
+	Eigen::MatrixXf randomized_vertices(2,6);
 	double ar_width = ((double) width/WIDTH)/2;
 	double ar_height = ((double) height/HEIGHT)/2;
-	double offset_x = generate_random_number(-9, -4, 4, 9)/10.0;
-	double offset_y = generate_random_number(-9, -4, 4, 9)/10.0;
-	to_append << 0 + offset_x, ar_width + offset_x,         0 + offset_x, ar_width + offset_x,  ar_width + offset_x,         0 + offset_x,
-				 0 + offset_y,        0 + offset_y, ar_height + offset_y, 	     0 + offset_y, ar_height + offset_y, ar_height + offset_y;
-	V.block(0,index_of_start_col, 2, 6) = to_append;
+	double offset_x = generate_random_number(-7, -4, 4, 7)/10.0;
+	double offset_y = generate_random_number(-7, -4, 4, 7)/10.0;
+	randomized_vertices << 0 + offset_x, ar_width + offset_x,         0 + offset_x, ar_width + offset_x, ar_width + offset_x,          0 + offset_x,
+				           0 + offset_y,        0 + offset_y, ar_height + offset_y, 	   0 + offset_y, ar_height + offset_y, ar_height + offset_y;
+	// Set vertices upright
+	V.block(0,index_of_start_col, 2, 6) = randomized_vertices;
+	// Randomize angles, then reset vertices
+	randomize_angles(randomized_vertices, index_of_start_col);
+	V.block(0,index_of_start_col, 2, 6) = randomized_vertices;
 }
 
 void append_texture_coordinates(int index_of_start_col) {
@@ -84,6 +122,7 @@ void load_all_textures() {
 		(char*)"images/left_eyebrow.png",
 		(char*)"images/right_eyebrow.png"
 	};
+	
 	std::vector<GLenum> texture_array = {GL_TEXTURE0, GL_TEXTURE1, GL_TEXTURE2,
 		GL_TEXTURE3, GL_TEXTURE4, GL_TEXTURE5, GL_TEXTURE6, GL_TEXTURE7
 	};
@@ -118,7 +157,7 @@ void load_all_textures() {
 	}
 	stbi_image_free(data);
 	intialize_base_values();
-
+	srand(time(0));
 	/* Rest of the images */
 	for (int t=1; t < NUM_OF_RECTS; t++) {
 		// Activate texture unit before binding texture

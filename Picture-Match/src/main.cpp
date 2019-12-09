@@ -24,6 +24,8 @@
 int WIDTH = 640;
 int HEIGHT = 640;
 
+Eigen::Matrix4f view = Eigen::Matrix4f::Identity();
+
 // VertexBufferObject wrapper
 VertexBufferObject VBO;
 VertexBufferObject VBO_tex;
@@ -46,6 +48,10 @@ double last_cursor_pos_y = 0.;
 bool rect_is_selected = false;
 uint index_of_selected_rect;
 
+bool game_finished = false;
+
+std::vector<Eigen::Matrix4f> list_of_transformation_matrices = {Eigen::Matrix4f::Identity()};
+
 // Converts screen coordinates to world coordinates
 void screen_to_world(GLFWwindow * window, double xpos, double ypos, double &xworld, double &yworld) {
 	// Get viewport size (canvas in number of pixels)
@@ -62,8 +68,15 @@ void screen_to_world(GLFWwindow * window, double xpos, double ypos, double &xwor
 	ypos *= highdpi;
 
 	// Convert screen position to world coordinates
-	xworld = ((xpos/double(width))*2)-1;
-	yworld = (((height-1-ypos)/double(height))*2)-1; // NOTE: y axis is flipped in glfw
+	Eigen::Vector4f p_screen(xpos,height-1-ypos,0,1);
+    Eigen::Vector4f p_canonical((p_screen[0]/width)*2-1,(p_screen[1]/height)*2-1,0,1);
+	Eigen::Vector4f p_world = view.inverse()*p_canonical;
+
+	xworld = (double) p_world[0];
+	yworld = (double) p_world[1];
+
+	// xworld = ((xpos/double(width))*2)-1;
+	// yworld = (((height-1-ypos)/double(height))*2)-1; // NOTE: y axis is flipped in glfw
 }
 
 // Translates the given index of rect by the given displacement
@@ -76,9 +89,9 @@ void translate_rect(int index_of_rect, Eigen::Vector2f dis) {
 // Finds the index of the first vertex of the rect the user selects
 void find_selected_rect() {
 	assert((V.cols() % 6 == 0) && (rect_is_selected == false));
-	// assert(V.cols() == 18);
-	int i = V.cols() - 6; // start checking from the last rect
-	for (int t=0; t < NUM_OF_RECTS-1; t++) { // the first rect, the base, can never be selected
+	int finalized_rects = NUM_OF_RECTS - unfinalized_rects;
+	int i = V.cols() - 6*(finalized_rects+1); // start checking from the last NONFINALIZED rect
+	for (int t=0; t < unfinalized_rects-1; t++) { // the first rect, the base, can never be selected
 		// First triangle
 		Eigen::Vector2d a = V.col(i).cast<double>();
 		Eigen::Vector2d b = V.col(i+1).cast<double>();
@@ -129,17 +142,20 @@ void test() {
 
 // Sets the center of the given rect
 void get_center(uint index_of_rect, float &center_x, float &center_y) {
-	int minx = V.col(index_of_rect).x();
-	int maxx = V.col(index_of_rect+1).x();
-	float width = (float) (maxx-minx);
+	float p1_x = V.col(index_of_rect).x();
+	float p1_y = V.col(index_of_rect).y();
 
-	int miny = V.col(index_of_rect).y();
-	int maxy = V.col(index_of_rect+2).y();
+	float p2_x = V.col(index_of_rect+1).x();
+	float p2_y = V.col(index_of_rect+1).y();
 
-	float height = (float) (maxy - miny);
+	float p3_x = V.col(index_of_rect+2).x();
+	float p3_y = V.col(index_of_rect+2).y();
+	
+	float p4_x = V.col(index_of_rect+4).x();
+	float p4_y = V.col(index_of_rect+4).y();
 
-	center_x = minx + width/2.0f;
-	center_y = miny + height/2.0f;
+	center_x = (p1_x + p2_x + p3_x + p4_x) /4.0f;
+	center_y = (p1_y + p2_y + p3_y + p4_y) /4.0f;
 }
 
 // Translates the given triangle directly
@@ -159,12 +175,13 @@ void translate_triangle(uint index_of_triangle, float dis_x, float dis_y) {
 	V.col(v_3).y() = V.col(v_3).y() - dis_y;
 }
 
-void rotate_triangle(int index_of_first_vertex, int angle, bool clockwise) {
+void rotate_triangle(int index_of_first_vertex, double angle, bool clockwise) {
+	// Convert to radians
 	double radians;
 	if (clockwise)
-		radians = (2*3.1415926535) - (angle * 3.1415926535 / 180.0);
+		radians = (2*3.1415926535) - ((angle * 3.1415926535) / 180.0);
 	else
-		radians = angle * 3.1415926535 / 180.0;
+		radians = (angle * 3.1415926535) / 180.0;
 	
 	// Directly editing positions of vertices CPU side
 	uint v_1 = index_of_first_vertex;
@@ -173,62 +190,51 @@ void rotate_triangle(int index_of_first_vertex, int angle, bool clockwise) {
 	
 	Eigen::MatrixXf R(2,2);
 	R << (float) cos(radians), (float) -sin(radians),
-		(float) sin(radians), (float) cos(radians);
+		 (float) sin(radians), (float) cos(radians);
 
 	V.col(v_1) = R * V.col(v_1);
 	V.col(v_2) = R * V.col(v_2);
 	V.col(v_3) = R * V.col(v_3);
 }
 
-void rotate_selected_rect(int degree, bool clockwise) {
-	
-	uint index_of_left_selected_triangle = index_of_selected_rect;
-	uint index_of_right_selected_triangle = index_of_selected_rect+3;
-
+void rotate_selected_rect(double degree, bool clockwise) {
+	std::cout << "rotating " << index_of_selected_rect << std::endl;
 	// Find displacement from barycenter to origin
 	float dis_x;
 	float dis_y;
-
 	get_center(index_of_selected_rect, dis_x, dis_y);
 
+	uint index_of_left_selected_triangle = index_of_selected_rect;
+	uint index_of_right_selected_triangle = index_of_selected_rect+3;
+
 	/* Rotate Left Triangle*/
-	// Translate each vertex to origin
+	// Translate center of triangle to origin
 	translate_triangle(index_of_left_selected_triangle, dis_x, dis_y);
-	// Rotate 10 degrees
-	rotate_triangle(index_of_left_selected_triangle, 10, true);
-	// translate, rotate, translate left triangle
+	// Rotate x degrees
+	rotate_triangle(index_of_left_selected_triangle, degree, clockwise);
+	// // translate, rotate, translate left triangle
 	translate_triangle(index_of_left_selected_triangle, -dis_x, -dis_y);
 
-	/* Rotate Right Triangle*/
-	// Translate each vertex to origin
+	// /* Rotate Right Triangle*/
+	// // Translate each vertex to origin
 	translate_triangle(index_of_right_selected_triangle, dis_x, dis_y);
-	// Rotate 10 degrees
-	rotate_triangle(index_of_right_selected_triangle, 10, true);
+	// // Rotate x degrees
+	rotate_triangle(index_of_right_selected_triangle, degree, clockwise);
 	// translate, rotate, translate right triangle
 	translate_triangle(index_of_right_selected_triangle, -dis_x, -dis_y);
 }
 
 void mouse_button_callback(GLFWwindow* window, int button, int action, int mods) {
-	// Get viewport size (canvas in number of pixels)
-	int width, height;
-	glfwGetFramebufferSize(window, &width, &height);
-
-	// Get the size of the window (may be different than the canvas size on retina displays)
-	int width_window, height_window;
-	glfwGetWindowSize(window, &width_window, &height_window);
-
 	// Get the position of the mouse in the window
 	double xpos, ypos;
 	glfwGetCursorPos(window, &xpos, &ypos);
 
-	// Deduce position of the mouse in the viewport
-	double highdpi = (double) width / (double) width_window;
-	xpos *= highdpi;
-	ypos *= highdpi;
-
 	// Convert screen position to world coordinates
-	double xworld = ((xpos/double(width))*2)-1;
-	double yworld = (((height-1-ypos)/double(height))*2)-1; // NOTE: y axis is flipped in glfw
+	// double xworld = ((xpos/double(width))*2)-1;
+	// double yworld = (((height-1-ypos)/double(height))*2)-1; // NOTE: y axis is flipped in glfw
+	double xworld;
+	double yworld;
+	screen_to_world(window, xpos, ypos, xworld, yworld);
 
 	// Update the position of the first vertex if the left button is pressed
 	if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
@@ -236,15 +242,18 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 		click.x() = xworld;
 		click.y() = yworld;
 
+		// std::cout << xworld << " " << yworld << std::endl;
+
 		// If there is already a selected rectangle, then deselect it
 		if (rect_is_selected) {
 			if (is_selected_rect_inside_base()) {
-				std::cout << "inside base" << std::endl;
+				// std::cout << "inside base" << std::endl;
 				remove_then_append_columns(V, index_of_selected_rect, 6);
 				remove_then_append_columns(TC, index_of_selected_rect, 6);
 				remove_then_append_columns(G, index_of_selected_rect, 6);
 
 				unfinalized_rects--;
+				std::cout << "finalized" << std::endl;
 			}
 			rect_is_selected = false; // what if user selects another rect, while another rect was selected?
 		} else {
@@ -266,12 +275,12 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 	// Update the position of the first vertex if the keys 1,2, or 3 are pressed
 	switch (key) {
 		case GLFW_KEY_J:
-			/*
-				rotate selected triangle left
-			*/
-			if (rect_is_selected) {
+			if (rect_is_selected)
 				rotate_selected_rect(10, true);
-			}
+			break;
+		case GLFW_KEY_K:
+			if (rect_is_selected)
+				rotate_selected_rect(10, false);
 			break;
 	}
 
@@ -283,16 +292,16 @@ void cursor_position_callback(GLFWwindow* window, double xpos, double ypos) {
 	double xpos_world, ypos_world;
 	screen_to_world(window, xpos, ypos, xpos_world, ypos_world);
 
-	Eigen::Vector2f dis;
-	dis << (float) xpos_world - (float) last_cursor_pos_x, (float) ypos_world - (float) last_cursor_pos_y;
+	// std::cout << xpos_world << " " << ypos_world << std::endl;
+
+	if (rect_is_selected) {
+		Eigen::Vector2f dis;
+		dis << (float) xpos_world - (float) last_cursor_pos_x, (float) ypos_world - (float) last_cursor_pos_y;
+		translate_rect(index_of_selected_rect, dis);
+	}
 
 	last_cursor_pos_x = xpos_world;
 	last_cursor_pos_y = ypos_world;
-
-	if (rect_is_selected) {
-		// std::cout << "selected rect: " << index_of_selected_rect/6 << std::endl;
-		translate_rect(index_of_selected_rect, dis);
-	}
 
 	VBO.update(V);
 }
@@ -369,14 +378,15 @@ int main(void) {
 
 		in vec2 position;
 		in vec2 texcoord;
-
 		in float group_num;
-		out float Group_num;
 
+		out float Group_num;
 		out vec2 Texcoord;
 
+		uniform mat4 view;
+
 		void main() {
-			gl_Position = vec4(position, 0.0, 1.0);
+			gl_Position = view * vec4(position, 0.0, 1.0);
 			Texcoord = texcoord;
 			Group_num = group_num;
 		}
@@ -464,14 +474,15 @@ int main(void) {
 	glUniform1i(program.uniform("tex6"), 6);
 	glUniform1i(program.uniform("tex7"), 7);
 	
-
-// test();
 	// Loop until the user closes the window
 	while (!glfwWindowShouldClose(window)) {
 		// Set the size of the viewport (canvas) to the size of the application window (framebuffer)
 		int width, height;
 		glfwGetFramebufferSize(window, &width, &height);
 		glViewport(0, 0, width, height);
+
+		WIDTH = width;
+		HEIGHT = height;
 
 		// Bind your VAO (not necessary if you have only one)
 		VAO.bind();
@@ -485,6 +496,19 @@ int main(void) {
 
 		// test();
 
+		float ar = (float) height / width;
+		view << ar, 0, 0, 0,
+				 0, 1, 0, 0,
+				 0, 0, 1, 0,
+				 0, 0, 0, 1;
+		glUniformMatrix4fv(program.uniform("view"), 1, GL_FALSE, view.data()); // sending 4x4 float matrix (v - vectorized version of the call)
+
+		/*
+			if game hasn't started yet
+				append new texture to all VBOs
+			if game has started
+				delete texture from all VBOs
+		*/
 
 		bool face_finished = (unfinalized_rects == 1);
 		if (face_finished) {
