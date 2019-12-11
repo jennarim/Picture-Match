@@ -1,6 +1,6 @@
-// This example is heavily based on the tutorial at https://open.gl
-
+// Based on the tutorial at https://open.gl
 ////////////////////////////////////////////////////////////////////////////////
+#include <iostream>
 // OpenGL Helpers to reduce the clutter
 #include "helpers.h"
 // GLFW is necessary to handle the OpenGL context
@@ -9,21 +9,18 @@
 #include <Eigen/Dense>
 // Timer
 #include <chrono>
-
-#include <iostream>
-
-// #include "texture.h"
-// STB Image Loading Library
-// #define STB_IMAGE_IMPLEMENTATION
-// #include "stb_image.h"
-
+// Loading Textures
 #include "texture.h"
+// Determine if a point is inside a triangle/rectangle
 #include "pointInPolygon.h"
+// Translate/rotate rectangles
+#include "transformation.h"
 ////////////////////////////////////////////////////////////////////////////////
 
 int WIDTH = 640;
 int HEIGHT = 640;
 
+// Viewport transformation/resize
 Eigen::Matrix4f view = Eigen::Matrix4f::Identity();
 
 // VertexBufferObject wrapper
@@ -31,30 +28,30 @@ VertexBufferObject VBO;
 VertexBufferObject VBO_tex;
 VertexBufferObject VBO_groups;
 
+// Info about number of textures
 uint const NUM_OF_RECTS = 9;
 uint const NUM_OF_FACE_PIECES = 7;
 uint unfinalized_faces = NUM_OF_FACE_PIECES;
 
-// Contains the vertex positions
+// Contains the vertex positions, texture coordinates, and which texture # the texture belongs 
 Eigen::MatrixXf V(2,6*NUM_OF_RECTS);
 Eigen::MatrixXf TC(2,6*NUM_OF_RECTS);
 Eigen::MatrixXf G(1,6*NUM_OF_RECTS);
 
+// Selection
+bool rect_is_selected = false;
+uint index_of_selected_rect;
 Eigen::Vector2d click;
 
 // Stores the previous position of the cursor
 double last_cursor_pos_x = 0.;
 double last_cursor_pos_y = 0.;
 
-bool rect_is_selected = false;
-uint index_of_selected_rect;
-
+// Game status
 int game_status;
 uint const INSTRUCTIONS_SCREEN = 0;
 uint const STARTED = 1;
 uint const FINISHED = 2;
-
-std::vector<Eigen::Matrix4f> list_of_transformation_matrices = {Eigen::Matrix4f::Identity()};
 
 // Converts screen coordinates to world coordinates
 void screen_to_world(GLFWwindow * window, double xpos, double ypos, double &xworld, double &yworld) {
@@ -83,22 +80,14 @@ void screen_to_world(GLFWwindow * window, double xpos, double ypos, double &xwor
 	// yworld = (((height-1-ypos)/double(height))*2)-1; // NOTE: y axis is flipped in glfw
 }
 
-// Translates the given index of rect by the given displacement
-void translate_rect(int index_of_rect, Eigen::Vector2f dis) {
-	for (int i=index_of_rect; i < index_of_rect+6; i++) {
-		V.col(i) = V.col(i) + dis;
-	}
-}
-
 // Finds the index of the first vertex of the rect the user selects
 void find_selected_rect() {
 	assert((V.cols() % 6 == 0) && (rect_is_selected == false));
 	
 	int index_of_last_unfinalized_face = 6*unfinalized_faces;
-	// 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14
-	// ^     ^     ^     ^        ^
-	// unfinalized_faces = 3; finalized_faces = 0; 
-	int i = index_of_last_unfinalized_face; // start checking from the last NONFINALIZED rect
+	int i = index_of_last_unfinalized_face; // start from the last NONFINALIZED rect
+
+	// Determine selected rect by checking intersection for each triangle
 	for (int t=0; t < unfinalized_faces; t++) {
 		// First triangle
 		Eigen::Vector2d a = V.col(i).cast<double>();
@@ -111,16 +100,16 @@ void find_selected_rect() {
 
 		if (is_point_inside_triangle(click, a,b,c) || is_point_inside_triangle(click, d,e,f)) {
 			rect_is_selected = true;
-			std::cout<<"inside " << i/6 <<std::endl;
 			index_of_selected_rect = i;
 			return;
 		}
 		i = i - 6;
 	}
+
 	rect_is_selected = false;
-	std::cout<<"outside"<<std::endl;
 }
 
+// Removes columns from given matrix to be appended at the end
 void remove_then_append_columns(Eigen::MatrixXf &matrix, uint first_col_to_remove, int num_of_cols_to_remove) {
 	uint col_to_remove = first_col_to_remove;
 	uint col_replace = first_col_to_remove + num_of_cols_to_remove;
@@ -135,76 +124,6 @@ void remove_then_append_columns(Eigen::MatrixXf &matrix, uint first_col_to_remov
 	matrix.rightCols(num_of_cols_to_remove) = removed_cols;
 }
 
-void test() {
-	Eigen::MatrixXf matrix(2,12);
-	matrix << 0,1,2,3,4,5,6,7,8,9,10,11,
-			  0,1,2,3,4,5,6,7,8,9,10,11;
-	// Eigen::MatrixXf removed_cols(2, 6);
-	// removed_cols = matrix.block(0, 3, 1, 6);
-	// std::cout<< removed_cols << std::endl;
-
-	remove_then_append_columns(matrix, 3, 6);
-	std::cout << matrix << std::endl;
-
-}
-
-// Sets the center of the given rect
-void get_center(uint index_of_rect, float &center_x, float &center_y) {
-	float p1_x = V.col(index_of_rect).x();
-	float p1_y = V.col(index_of_rect).y();
-
-	float p2_x = V.col(index_of_rect+1).x();
-	float p2_y = V.col(index_of_rect+1).y();
-
-	float p3_x = V.col(index_of_rect+2).x();
-	float p3_y = V.col(index_of_rect+2).y();
-	
-	float p4_x = V.col(index_of_rect+4).x();
-	float p4_y = V.col(index_of_rect+4).y();
-
-	center_x = (p1_x + p2_x + p3_x + p4_x) /4.0f;
-	center_y = (p1_y + p2_y + p3_y + p4_y) /4.0f;
-}
-
-// Translates the given triangle directly
-void translate_triangle(uint index_of_triangle, float dis_x, float dis_y) {
-	// Directly editing positions of vertices CPU side
-	uint v_1 = index_of_triangle;
-	uint v_2 = index_of_triangle+1;
-	uint v_3 = index_of_triangle+2;
-
-	V.col(v_1).x() = V.col(v_1).x() - dis_x;
-	V.col(v_1).y() = V.col(v_1).y() - dis_y;
-
-	V.col(v_2).x() = V.col(v_2).x() - dis_x;
-	V.col(v_2).y() = V.col(v_2).y() - dis_y;
-
-	V.col(v_3).x() = V.col(v_3).x() - dis_x;
-	V.col(v_3).y() = V.col(v_3).y() - dis_y;
-}
-
-void rotate_triangle(int index_of_first_vertex, double angle, bool clockwise) {
-	// Convert to radians
-	double radians;
-	if (clockwise)
-		radians = (2*3.1415926535) - ((angle * 3.1415926535) / 180.0);
-	else
-		radians = (angle * 3.1415926535) / 180.0;
-	
-	// Directly editing positions of vertices CPU side
-	uint v_1 = index_of_first_vertex;
-	uint v_2 = index_of_first_vertex+1;
-	uint v_3 = index_of_first_vertex+2;
-	
-	Eigen::MatrixXf R(2,2);
-	R << (float) cos(radians), (float) -sin(radians),
-		 (float) sin(radians), (float) cos(radians);
-
-	V.col(v_1) = R * V.col(v_1);
-	V.col(v_2) = R * V.col(v_2);
-	V.col(v_3) = R * V.col(v_3);
-}
-
 void reset_game() {
 	game_status = STARTED;
 	unfinalized_faces = NUM_OF_FACE_PIECES;
@@ -213,35 +132,9 @@ void reset_game() {
 	load_all_textures();
 }
 
-void rotate_selected_rect(double degree, bool clockwise) {
-	std::cout << "rotating " << index_of_selected_rect << std::endl;
-	// Find displacement from barycenter to origin
-	float dis_x;
-	float dis_y;
-	get_center(index_of_selected_rect, dis_x, dis_y);
-
-	uint index_of_left_selected_triangle = index_of_selected_rect;
-	uint index_of_right_selected_triangle = index_of_selected_rect+3;
-
-	/* Rotate Left Triangle*/
-	// Translate center of triangle to origin
-	translate_triangle(index_of_left_selected_triangle, dis_x, dis_y);
-	// Rotate x degrees
-	rotate_triangle(index_of_left_selected_triangle, degree, clockwise);
-	// // translate, rotate, translate left triangle
-	translate_triangle(index_of_left_selected_triangle, -dis_x, -dis_y);
-
-	// /* Rotate Right Triangle*/
-	// // Translate each vertex to origin
-	translate_triangle(index_of_right_selected_triangle, dis_x, dis_y);
-	// // Rotate x degrees
-	rotate_triangle(index_of_right_selected_triangle, degree, clockwise);
-	// translate, rotate, translate right triangle
-	translate_triangle(index_of_right_selected_triangle, -dis_x, -dis_y);
-}
-
 void mouse_button_callback(GLFWwindow* window, int button, int action, int mods) {
 	if (game_status == FINISHED) return;
+	
 	// Get the position of the mouse in the window
 	double xpos, ypos;
 	glfwGetCursorPos(window, &xpos, &ypos);
@@ -254,28 +147,23 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 	if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
 		if (game_status == INSTRUCTIONS_SCREEN) {
 			game_status = STARTED;
-			std::cout << "game status: " << game_status << std::endl;
 			return;
 		}
 
-		// mouse_is_down = true;
 		click.x() = xworld;
 		click.y() = yworld;
 
-		// std::cout << xworld << " " << yworld << std::endl;
-
-		// If there is already a selected rectangle, then deselect it
 		if (rect_is_selected) {
+			// The user finalized the selected piece
 			if (is_selected_rect_inside_base()) {
-				// std::cout << "inside base" << std::endl;
 				remove_then_append_columns(V, index_of_selected_rect, 6);
 				remove_then_append_columns(TC, index_of_selected_rect, 6);
 				remove_then_append_columns(G, index_of_selected_rect, 6);
 
 				unfinalized_faces--;
-				std::cout << "finalized" << std::endl;
 			}
-			rect_is_selected = false; // what if user selects another rect, while another rect was selected?
+			// The user clicked outside any face
+			rect_is_selected = false;
 		} else {
 			find_selected_rect();
 		}
@@ -288,8 +176,6 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 }
 
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods) {
-	// Update the position of the first vertex if the keys 1,2, or 3 are pressed
-
 	if (action == GLFW_PRESS) {	// Avoid updating twice, as function is called 
 	switch (key) {
 		case GLFW_KEY_J:
@@ -305,6 +191,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 			break;
 	}
 	}
+
 	// Upload the change to the GPU
 	VBO.update(V);
 	VBO_tex.update(TC);
@@ -315,11 +202,8 @@ void cursor_position_callback(GLFWwindow* window, double xpos, double ypos) {
 	double xpos_world, ypos_world;
 	screen_to_world(window, xpos, ypos, xpos_world, ypos_world);
 
-	float center_x, center_y;
-	get_center(index_of_selected_rect, center_x, center_y);
-	// std::cout << "Center: " << center_x << " " << center_y << std::endl;
-
 	if (rect_is_selected) {
+		// Bind selected piece to cursor
 		Eigen::Vector2f dis;
 		dis << (float) xpos_world - (float) last_cursor_pos_x, (float) ypos_world - (float) last_cursor_pos_y;
 		translate_rect(index_of_selected_rect, dis);
@@ -528,32 +412,37 @@ int main(void) {
 		glClearColor(0.5f, 0.5f, 0.5f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT);
 
+		// Find the adjusted aspect ratio of the window
 		float ar = (float) height_window / width_window;
 		view << ar, 0, 0, 0,
 				 0, 1, 0, 0,
 				 0, 0, 1, 0,
 				 0, 0, 0, 1;
-		glUniformMatrix4fv(program.uniform("view"), 1, GL_FALSE, view.data()); // sending 4x4 float matrix (v - vectorized version of the call)
+		glUniformMatrix4fv(program.uniform("view"), 1, GL_FALSE, view.data());
 
-		if (game_status == INSTRUCTIONS_SCREEN) {
-			int index_of_instr = 6*(NUM_OF_FACE_PIECES+1); // instr is always the rect after all the face pieces
-			glDrawArrays(GL_TRIANGLES, index_of_instr, 6);
-		} else if (game_status == STARTED) {
-			if (unfinalized_faces == 0) {
-				game_status = FINISHED;
-			} else {
-				glDrawArrays(GL_TRIANGLES, 0, 6*(unfinalized_faces+1)); // add 1, to draw the base face
+		switch (game_status) {
+			case INSTRUCTIONS_SCREEN: {
+				int index_of_instr = 6*(NUM_OF_FACE_PIECES+1); // instr is always the rect after all the face pieces
+				glDrawArrays(GL_TRIANGLES, index_of_instr, 6);
+				break;
+			} case STARTED: {
+				if (unfinalized_faces == 0) {
+					game_status = FINISHED;
+				} else {
+					glDrawArrays(GL_TRIANGLES, 0, 6*(unfinalized_faces+1)); // add 1, to draw the base face
+				}
+				break;
+			} case FINISHED: {
+				// Display base face
+				glDrawArrays(GL_TRIANGLES, 0, 6);
+
+				// Display finalized face pieces
+				int index_of_instr = 6; // when all has been finalized, instructions page is the second texture
+				int index_of_first_face = index_of_instr + 6;
+				glDrawArrays(GL_TRIANGLES, index_of_first_face, 6*(NUM_OF_FACE_PIECES));
+				break;
 			}
-		} else if (game_status == FINISHED) {
-			std::cout << "FINISHED" << std::endl;
-			// Display base face
-			glDrawArrays(GL_TRIANGLES, 0, 6);
-
-			// Display finalized face pieces
-			int index_of_instr = 6; // when all has been finalized, instructions page is the second texture
-			int index_of_first_face = index_of_instr + 6;
-			glDrawArrays(GL_TRIANGLES, index_of_first_face, 6*(NUM_OF_FACE_PIECES));
-		}		
+		}
 
 		// Swap front and back buffers
 		glfwSwapBuffers(window);

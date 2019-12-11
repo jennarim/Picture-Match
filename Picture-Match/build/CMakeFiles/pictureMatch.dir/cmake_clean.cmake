@@ -3,6 +3,7 @@ file(REMOVE_RECURSE
   "CMakeFiles/pictureMatch.dir/src/main.cpp.o"
   "CMakeFiles/pictureMatch.dir/src/pointInPolygon.cpp.o"
   "CMakeFiles/pictureMatch.dir/src/texture.cpp.o"
+  "CMakeFiles/pictureMatch.dir/src/transformation.cpp.o"
   "pictureMatch"
   "pictureMatch.pdb"
 )

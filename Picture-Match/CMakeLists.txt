@@ -15,6 +15,8 @@ add_executable(${PROJECT_NAME}
 	src/texture.h
 	src/pointInPolygon.cpp
 	src/pointInPolygon.h
+	src/transformation.cpp
+	src/transformation.h
 )
 
 # Use C++11 version of the standard
