@@ -21,13 +21,22 @@ extern Eigen::MatrixXf V;
 extern Eigen::MatrixXf TC;
 extern Eigen::MatrixXf G;
 
-void intialize_base_values() {
+const uint NUM_OF_RECTS = 9;
+
+GLuint tex[NUM_OF_RECTS];
+
+void intialize_base_values(int width, int height) {
 	Eigen::MatrixXf V_0(2,6);
 	Eigen::MatrixXf TC_0(2,6);
 	Eigen::MatrixXf G_0(1,6);
 
-	V_0 << -0.5, 0.5, -0.5, 0.5, 0.5, -0.5,
-	       -0.5, -0.5, 0.5, -0.5, 0.5, 0.5;
+	double ar_width = ((double) width/WIDTH)/2;
+	double ar_height = ((double) height/HEIGHT)/2;
+	double offset_x = -ar_width/2;
+	double offset_y = -ar_height/2;
+
+	V_0 << 0+offset_x, ar_width+offset_x,         0+offset_x, ar_width+offset_x, ar_width+offset_x, 0+offset_x,
+	       0+offset_y,        0+offset_y, ar_height+offset_y,        0+offset_y, ar_height+offset_y, ar_height+offset_y;
 	TC_0 << 0, 1, 0, 1, 1, 0,
 		    0, 0, 1, 0, 1, 1;
 	G_0 << 0, 0, 0, 0, 0, 0;
@@ -35,6 +44,23 @@ void intialize_base_values() {
 	V.block(0, 0, 2, 6) = V_0;
 	TC.block(0, 0, 2, 6) = TC_0;
 	G.block(0, 0, 1, 6) = G_0;
+}
+
+void initialize_instr_values(int index_of_instr){
+	Eigen::MatrixXf V_0(2,6);
+	Eigen::MatrixXf TC_0(2,6);
+	Eigen::MatrixXf G_0(1,6);
+
+	V_0 << -1, 1,-1, 1,1,-1,
+		   -1,-1, 1,-1,1,1;
+	V.block(0,6*index_of_instr, 2, 6) = V_0;
+
+	TC_0 << 0, 1, 0, 1, 1, 0,
+		    0, 0, 1, 0, 1, 1;
+	TC.block(0, 6*index_of_instr, 2, 6) = TC_0;
+
+	G_0 << index_of_instr, index_of_instr, index_of_instr, index_of_instr, index_of_instr, index_of_instr;
+	G.block(0, 6*index_of_instr, 1, 6) = G_0;
 }
 
 int generate_random_number(int left_bot, int left_top, int right_bot, int right_top) {
@@ -65,7 +91,6 @@ void randomize_angles(Eigen::MatrixXf &vertices, int index_of_start_col) {
 
 	// Convert to radians
 	double rad = random * (3.1415926535/180);
-	std::cout << rad << std::endl;
 	R << cos(rad), -sin(rad),
 		 sin(rad), cos(rad);
 
@@ -105,15 +130,16 @@ void append_groups(int texture_num, int index_of_start_col) {
 	G.block(0,index_of_start_col, 1, 6) = to_append;
 }
 
+void destroy_all_textures() {
+	glDeleteTextures(NUM_OF_RECTS, tex);
+}
+
 void load_all_textures() {
 	extern VertexBufferObject VBO;
 	extern VertexBufferObject VBO_tex;
 	extern VertexBufferObject VBO_groups;
-	extern uint unfinalized_rects;
 
-	const uint NUM_OF_RECTS = unfinalized_rects;
-
-	std::vector<char *> img_filenames = { (char*)"images/base.png", 
+	std::vector<char *> img_filenames = { (char*)"images/face.png", 
 		(char*)"images/mouth.png", 
 		(char*)"images/left_eye.png",
 		(char*)"images/right_eye.png",
@@ -121,17 +147,20 @@ void load_all_textures() {
 		(char*)"images/nose.png",
 		(char*)"images/left_eyebrow.png",
 		(char*)"images/right_eyebrow.png"
+		,(char*)"images/instructions.png"
 	};
+
+	assert(img_filenames.size() == NUM_OF_RECTS);
 	
 	std::vector<GLenum> texture_array = {GL_TEXTURE0, GL_TEXTURE1, GL_TEXTURE2,
 		GL_TEXTURE3, GL_TEXTURE4, GL_TEXTURE5, GL_TEXTURE6, GL_TEXTURE7
-	};
+		,GL_TEXTURE8
+	}; 
 
 	// Flip images when loaded
 	stbi_set_flip_vertically_on_load(true);
 
 	/* Load images into GPU memory */
-	GLuint tex[NUM_OF_RECTS];
 	glGenTextures(NUM_OF_RECTS, tex);
 	int width, height, nrChannels;
 	unsigned char *data;
@@ -156,7 +185,7 @@ void load_all_textures() {
 		std::cout << "Failed to load texture" << std::endl;
 	}
 	stbi_image_free(data);
-	intialize_base_values();
+	intialize_base_values(width, height);
 	srand(time(0));
 	/* Rest of the images */
 	for (int t=1; t < NUM_OF_RECTS; t++) {
@@ -198,7 +227,32 @@ void load_all_textures() {
 		append_groups(t, index_of_start_col);
 	}
 
+	/* Instructions Image */ 
+	glActiveTexture(texture_array[8]);
+	// Enable Transparency
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	glBindTexture(GL_TEXTURE_2D, tex[8]);
+	// Texture Wrapping
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+ 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	// Load to CPU memory
+	data = stbi_load(img_filenames[8], &width, &height, &nrChannels, 0);
+	if (data) {
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+		glGenerateMipmap(GL_TEXTURE_2D);
+	} else {
+		std::cout << "Failed to load texture" << std::endl;
+	}
+	stbi_image_free(data);
+	initialize_instr_values(8);
+
 	VBO.update(V);
 	VBO_tex.update(TC);
 	VBO_groups.update(G);
 }
+
+
+

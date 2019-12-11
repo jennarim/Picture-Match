@@ -31,8 +31,9 @@ VertexBufferObject VBO;
 VertexBufferObject VBO_tex;
 VertexBufferObject VBO_groups;
 
-uint const NUM_OF_RECTS = 8;
-uint unfinalized_rects = NUM_OF_RECTS;
+uint const NUM_OF_RECTS = 9;
+uint const NUM_OF_FACE_PIECES = 7;
+uint unfinalized_faces = NUM_OF_FACE_PIECES;
 
 // Contains the vertex positions
 Eigen::MatrixXf V(2,6*NUM_OF_RECTS);
@@ -48,7 +49,10 @@ double last_cursor_pos_y = 0.;
 bool rect_is_selected = false;
 uint index_of_selected_rect;
 
-bool game_finished = false;
+int game_status;
+uint const INSTRUCTIONS_SCREEN = 0;
+uint const STARTED = 1;
+uint const FINISHED = 2;
 
 std::vector<Eigen::Matrix4f> list_of_transformation_matrices = {Eigen::Matrix4f::Identity()};
 
@@ -89,9 +93,13 @@ void translate_rect(int index_of_rect, Eigen::Vector2f dis) {
 // Finds the index of the first vertex of the rect the user selects
 void find_selected_rect() {
 	assert((V.cols() % 6 == 0) && (rect_is_selected == false));
-	int finalized_rects = NUM_OF_RECTS - unfinalized_rects;
-	int i = V.cols() - 6*(finalized_rects+1); // start checking from the last NONFINALIZED rect
-	for (int t=0; t < unfinalized_rects-1; t++) { // the first rect, the base, can never be selected
+	
+	int index_of_last_unfinalized_face = 6*unfinalized_faces;
+	// 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14
+	// ^     ^     ^     ^        ^
+	// unfinalized_faces = 3; finalized_faces = 0; 
+	int i = index_of_last_unfinalized_face; // start checking from the last NONFINALIZED rect
+	for (int t=0; t < unfinalized_faces; t++) {
 		// First triangle
 		Eigen::Vector2d a = V.col(i).cast<double>();
 		Eigen::Vector2d b = V.col(i+1).cast<double>();
@@ -197,6 +205,14 @@ void rotate_triangle(int index_of_first_vertex, double angle, bool clockwise) {
 	V.col(v_3) = R * V.col(v_3);
 }
 
+void reset_game() {
+	game_status = STARTED;
+	unfinalized_faces = NUM_OF_FACE_PIECES;
+	rect_is_selected = false;
+	destroy_all_textures();
+	load_all_textures();
+}
+
 void rotate_selected_rect(double degree, bool clockwise) {
 	std::cout << "rotating " << index_of_selected_rect << std::endl;
 	// Find displacement from barycenter to origin
@@ -225,19 +241,23 @@ void rotate_selected_rect(double degree, bool clockwise) {
 }
 
 void mouse_button_callback(GLFWwindow* window, int button, int action, int mods) {
+	if (game_status == FINISHED) return;
 	// Get the position of the mouse in the window
 	double xpos, ypos;
 	glfwGetCursorPos(window, &xpos, &ypos);
 
-	// Convert screen position to world coordinates
-	// double xworld = ((xpos/double(width))*2)-1;
-	// double yworld = (((height-1-ypos)/double(height))*2)-1; // NOTE: y axis is flipped in glfw
 	double xworld;
 	double yworld;
 	screen_to_world(window, xpos, ypos, xworld, yworld);
 
 	// Update the position of the first vertex if the left button is pressed
 	if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
+		if (game_status == INSTRUCTIONS_SCREEN) {
+			game_status = STARTED;
+			std::cout << "game status: " << game_status << std::endl;
+			return;
+		}
+
 		// mouse_is_down = true;
 		click.x() = xworld;
 		click.y() = yworld;
@@ -252,17 +272,13 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 				remove_then_append_columns(TC, index_of_selected_rect, 6);
 				remove_then_append_columns(G, index_of_selected_rect, 6);
 
-				unfinalized_rects--;
+				unfinalized_faces--;
 				std::cout << "finalized" << std::endl;
 			}
 			rect_is_selected = false; // what if user selects another rect, while another rect was selected?
 		} else {
 			find_selected_rect();
 		}
-	}
-
-	if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_RELEASE) {
-		// mouse_is_down = false;
 	}
 
 	// Upload the change to the GPU
@@ -273,26 +289,35 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods) {
 	// Update the position of the first vertex if the keys 1,2, or 3 are pressed
+
+	if (action == GLFW_PRESS) {	// Avoid updating twice, as function is called 
 	switch (key) {
 		case GLFW_KEY_J:
 			if (rect_is_selected)
-				rotate_selected_rect(10, true);
+				rotate_selected_rect(20, true);
 			break;
 		case GLFW_KEY_K:
 			if (rect_is_selected)
-				rotate_selected_rect(10, false);
+				rotate_selected_rect(20, false);
+			break;
+		case GLFW_KEY_R:
+			reset_game();
 			break;
 	}
-
+	}
 	// Upload the change to the GPU
 	VBO.update(V);
+	VBO_tex.update(TC);
+	VBO_groups.update(G);
 }
 
 void cursor_position_callback(GLFWwindow* window, double xpos, double ypos) {
 	double xpos_world, ypos_world;
 	screen_to_world(window, xpos, ypos, xpos_world, ypos_world);
 
-	// std::cout << xpos_world << " " << ypos_world << std::endl;
+	float center_x, center_y;
+	get_center(index_of_selected_rect, center_x, center_y);
+	// std::cout << "Center: " << center_x << " " << center_y << std::endl;
 
 	if (rect_is_selected) {
 		Eigen::Vector2f dis;
@@ -326,7 +351,7 @@ int main(void) {
 #endif
 
 	// Create a windowed mode window and its OpenGL context
-	GLFWwindow * window = glfwCreateWindow(WIDTH, HEIGHT, "[Float] Hello World", NULL, NULL);
+	GLFWwindow * window = glfwCreateWindow(WIDTH, HEIGHT, "Picture Match", NULL, NULL);
 	if (!window) {
 		glfwTerminate();
 		return -1;
@@ -408,6 +433,7 @@ int main(void) {
 		uniform sampler2D tex5;
 		uniform sampler2D tex6;
 		uniform sampler2D tex7;
+		uniform sampler2D tex8;
 
 		void main()
 		{
@@ -437,6 +463,9 @@ int main(void) {
 					break;
 				case 7:
 					outColor = texture(tex7, Texcoord);
+					break;
+				case 8:
+					outColor = texture(tex8, Texcoord);
 					break;
 			}
 		}
@@ -473,6 +502,7 @@ int main(void) {
 	glUniform1i(program.uniform("tex5"), 5);
 	glUniform1i(program.uniform("tex6"), 6);
 	glUniform1i(program.uniform("tex7"), 7);
+	glUniform1i(program.uniform("tex8"), 8);
 	
 	// Loop until the user closes the window
 	while (!glfwWindowShouldClose(window)) {
@@ -481,8 +511,12 @@ int main(void) {
 		glfwGetFramebufferSize(window, &width, &height);
 		glViewport(0, 0, width, height);
 
-		WIDTH = width;
-		HEIGHT = height;
+		// Get the size of the window (may be different than the canvas size on retina displays)
+		int width_window, height_window;
+		glfwGetWindowSize(window, &width_window, &height_window);
+
+		WIDTH = width_window;
+		HEIGHT = height_window;
 
 		// Bind your VAO (not necessary if you have only one)
 		VAO.bind();
@@ -494,28 +528,31 @@ int main(void) {
 		glClearColor(0.5f, 0.5f, 0.5f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT);
 
-		// test();
-
-		float ar = (float) height / width;
+		float ar = (float) height_window / width_window;
 		view << ar, 0, 0, 0,
 				 0, 1, 0, 0,
 				 0, 0, 1, 0,
 				 0, 0, 0, 1;
 		glUniformMatrix4fv(program.uniform("view"), 1, GL_FALSE, view.data()); // sending 4x4 float matrix (v - vectorized version of the call)
 
-		/*
-			if game hasn't started yet
-				append new texture to all VBOs
-			if game has started
-				delete texture from all VBOs
-		*/
-
-		bool face_finished = (unfinalized_rects == 1);
-		if (face_finished) {
+		if (game_status == INSTRUCTIONS_SCREEN) {
+			int index_of_instr = 6*(NUM_OF_FACE_PIECES+1); // instr is always the rect after all the face pieces
+			glDrawArrays(GL_TRIANGLES, index_of_instr, 6);
+		} else if (game_status == STARTED) {
+			if (unfinalized_faces == 0) {
+				game_status = FINISHED;
+			} else {
+				glDrawArrays(GL_TRIANGLES, 0, 6*(unfinalized_faces+1)); // add 1, to draw the base face
+			}
+		} else if (game_status == FINISHED) {
 			std::cout << "FINISHED" << std::endl;
-			glDrawArrays(GL_TRIANGLES, 0, 6*NUM_OF_RECTS);
-		} else {
-			glDrawArrays(GL_TRIANGLES, 0, 6*unfinalized_rects);
+			// Display base face
+			glDrawArrays(GL_TRIANGLES, 0, 6);
+
+			// Display finalized face pieces
+			int index_of_instr = 6; // when all has been finalized, instructions page is the second texture
+			int index_of_first_face = index_of_instr + 6;
+			glDrawArrays(GL_TRIANGLES, index_of_first_face, 6*(NUM_OF_FACE_PIECES));
 		}		
 
 		// Swap front and back buffers
