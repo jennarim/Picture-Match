@@ -26,3 +26,6 @@ The player is allowed to rotate face pieces (images) and place them at the locat
 **Translation** Each time the user clicks on a face part, it follows the cursor.
 
 **Rotation** The user can rotate each face part using the J/K keys; this rotation is done around the texture’s center.
+
+## View Control
+Resizing the application window maintains the vector graphics as is. 
