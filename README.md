@@ -20,3 +20,9 @@ The player is allowed to rotate face pieces (images) and place them at the locat
 <img width="200" alt="5" src="https://user-images.githubusercontent.com/20725513/72637307-fe8aa780-392e-11ea-8cd8-5b98e1d38ab3.png">
 6. The user can press R to restart, and continue to play and admire the result.
 <img width="200" alt="6" src="https://user-images.githubusercontent.com/20725513/72637323-08140f80-392f-11ea-96af-079b1895853b.png">
+
+# Implementation
+## Transformation
+**Translation** Each time the user clicks on a face part, it follows the cursor.
+
+**Rotation** The user can rotate each face part using the J/K keys; this rotation is done around the texture’s center.
