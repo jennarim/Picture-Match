@@ -5,6 +5,9 @@ The implemented OpenGL application involves the following:
 2. Texture Transformation (Rotation)
 3. View Control
 
+# Demo
+<img src="https://user-images.githubusercontent.com/20725513/73604361-93abb400-455d-11ea-94fa-720686595aef.gif">
+
 # Introduction
 "Picture Match" is a game similar to pin-the-tail-on-the-donkey in that it involves placing face parts such as eyes, nose, mouth to a blank face while guessing their correct location. 
 The player is allowed to rotate face pieces (images) and place them at the location they guess fits best.
