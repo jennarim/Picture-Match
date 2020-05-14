@@ -1,2 +1,6 @@
 .vscode/
 .DS_Store
+Picture-Match/build/CMakeCache.txt
+Picture-Match/build/CMakeFiles
+Picture-Match/build/Makefile
+Picture-Match/build/cmake_install.cmake

@@ -1,8 +1,0 @@
-{
-    "files.associations": {
-        "ios": "cpp",
-        "iterator": "cpp",
-        "string": "cpp",
-        "vector": "cpp"
-    }
-}
