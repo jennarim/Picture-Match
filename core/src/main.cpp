@@ -2,7 +2,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 #include <iostream>
 // OpenGL Helpers to reduce the clutter
-#include <helpers.h>
+#include "../include/helpers.h"
 // GLFW is necessary to handle the OpenGL context
 #include <GLFW/glfw3.h>
 // Linear Algebra Library
