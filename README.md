@@ -8,10 +8,10 @@ An OpenGL application like pin-the-tail-on-the-donkey -- except adapted for scre
 ## Table of Contents
 * [Demo Gif](#demo)
 * [Key Features](#key-features)
-* [Installation](#installation)
 * [Example](#example)
+* [Installation](#installation)
 * [Built with](#built-with)
-* [Project Status](#)
+* [Project Status](#project-status)
 
 ## Demo
 <img src="https://user-images.githubusercontent.com/20725513/73604361-93abb400-455d-11ea-94fa-720686595aef.gif">
@@ -26,13 +26,15 @@ Picture Match uses Eigen, glad, and GLFW as submodules. To pull submodules with 
 `git clone --recurse-submodules https://github.com/jennarim/Picture-Match.git`
 
 The project is compiled using CMake.
-`mkdir build
+`
+cd Picture-Match/
+mkdir build
 cd build
 cmake ..
 make`
 
-After the above is executed, to run the project, use this command.
-`./picture-Match`
+Lastly, run the project with this command.
+`./pictureMatch`
 
 ## Example
 1. The picture of the desired image is initially shown to the player, alongside other instructions.
