@@ -1,16 +1,40 @@
+<p align="center">
+  <img src="documentation/logo.png" alt="Picture Match logo"> 
+</p>
+
 # Picture Match
+An OpenGL application like pin-the-tail-on-the-donkey -- except adapted for screens.
 
-The implemented OpenGL application involves the following:
-1. Texture Mapping
-2. Texture Transformation (Rotation)
-3. View Control
+## Table of Contents
+* [Demo Gif](#demo)
+* [Key Features](#key-features)
+* [Installation](#installation)
+* [Example](#example)
+* [Built with](#built-with)
+* [Project Status](#)
 
-# Demo
+## Demo
 <img src="https://user-images.githubusercontent.com/20725513/73604361-93abb400-455d-11ea-94fa-720686595aef.gif">
 
-# Introduction
-"Picture Match" is a game similar to pin-the-tail-on-the-donkey in that it involves placing face parts such as eyes, nose, mouth to a blank face while guessing their correct location. 
-The player is allowed to rotate face pieces (images) and place them at the location they guess fits best.
+## Key Features
+* Texture Mapping - Play around with vector graphics by rotating or moving 
+* Texture Transformation - Rotate the eyes, ears, etc with 'J' or 'K' keys
+* View Control - Resizing the window does not warp the graphics
+
+## Installation
+Picture Match uses Eigen, glad, and GLFW as submodules. To pull submodules with the project, add the argument --recurse-submodules.
+`git clone --recurse-submodules https://github.com/jennarim/Picture-Match.git`
+
+The project is compiled using CMake.
+`mkdir build
+cd build
+cmake ..
+make`
+
+After the above is executed, to run the project, use this command.
+`./picture-Match`
+
+## Example
 1. The picture of the desired image is initially shown to the player, alongside other instructions.
 <img width="200" alt="1" src="https://user-images.githubusercontent.com/20725513/72637158-a5bb0f00-392e-11ea-9317-ca8660fe1dc4.png">
 2. The face parts are placed and rotated randomly outside the face the user should drag the parts to.
@@ -24,11 +48,13 @@ The player is allowed to rotate face pieces (images) and place them at the locat
 6. The user can press R to restart, and continue to play and admire the result.
 <img width="200" alt="6" src="https://user-images.githubusercontent.com/20725513/72637323-08140f80-392f-11ea-96af-079b1895853b.png">
 
-# Implementation
-## Transformation
-**Translation** Each time the user clicks on a face part, it follows the cursor.
+## Built With
+* [OpenGL](https://www.opengl.org/) - the most widely adopted 2D and 3D graphics API in the industry
+* [glad](https://glad.dav1d.de/) - an OpenGL loading library
+* [Eigen](https://gitlab.com/libeigen/eigen) - a C++ linear algebra library
+* [GLFW](https://www.glfw.org/) - an OpenGL library for creating windows and receiving input and events
 
-**Rotation** The user can rotate each face part using the J/K keys; this rotation is done around the texture’s center.
+## Project Status
+This project is currently finished. 
 
-## View Control
-Resizing the application window maintains the vector graphics as is. 
+
