@@ -1,9 +1,9 @@
-[submodule "ext/eigen"]
+[submodule "eigen"]
 	path = ext/eigen
 	url = https://gitlab.com/libeigen/eigen
-[submodule "ext/glad"]
+[submodule "glad"]
 	path = ext/glad
 	url = https://github.com/Dav1dde/glad
-[submodule "ext/glfw"]
+[submodule "glfw"]
 	path = ext/glfw
 	url = https://github.com/glfw/glfw
